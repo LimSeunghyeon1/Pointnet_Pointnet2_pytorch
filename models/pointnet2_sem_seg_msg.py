@@ -49,8 +49,15 @@ class get_loss(nn.Module):
 
         return total_loss
 
+
 if __name__ == '__main__':
-    import  torch
-    model = get_model(13)
-    xyz = torch.rand(6, 9, 2048)
-    (model(xyz))
+    
+    model = get_model(50, True)
+    
+    x = torch.rand(4,6,32768).cuda()
+    md = torch.load('/home/tidy/plane_detection/Pointnet_Pointnet2_pytorch/log/part_seg/pointnet2_part_seg_msg/checkpoints/best_model.pth')
+    model.load_state_dict(md['model_state_dict'])
+    model.train()
+    model.cuda()
+    y = model(x)
+    print("y", y.shape)
