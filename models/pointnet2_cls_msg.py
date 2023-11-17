@@ -11,14 +11,9 @@ num_class: # of class of an object
 output: class prob, part_embedding
 '''
 class get_model(nn.Module):
-    def __init__(self, num_points, num_class, llama_model, ckpt_dir, normal_channel=True, seq_len=10, tok_dim=32000):
+    def __init__(self, num_points, num_class, normal_channel=True):
         super(get_model, self).__init__()
-        if '7b' in ckpt_dir:
-            self.emb_dim = 4096
-        elif '13b' in ckpt_dir:
-            self.emb_dim = 5120
-        else:
-            raise NotImplementedError
+        
         self.num_points = num_points
         in_channel = 3 if normal_channel else 0
         self.normal_channel = normal_channel
@@ -36,18 +31,12 @@ class get_model(nn.Module):
 
         self.fp3 = PointNetFeaturePropagation(in_channel=1024+640, mlp=[256,256])
         self.fp2 = PointNetFeaturePropagation(in_channel=256+320, mlp=[256, 128])
-        self.fp1 = PointNetFeaturePropagation(in_channel=128+in_channel, mlp=[128, 256, 512])
-        self.conv_part1 = nn.Conv1d(512, 1024, 1)
-        self.bn_part1 = nn.BatchNorm1d(1024)
-        self.drop_part1 = nn.Dropout(0.4)
-        self.conv_part2 = nn.Conv1d(1024, 2048, 1)
-        self.bn_part2 = nn.BatchNorm1d(2048)
-        self.drop_part2 = nn.Dropout(0.5)
-        self.conv_part3 = nn.Conv1d(2048, self.emb_dim, 1)
-        # get pseudo embedding size: B seq_len 4096 -> output would be softmaxed B seq_len 32000
-
-        self.llama_model = llama_model
-
+        self.fp1 = PointNetFeaturePropagation(in_channel=128+in_channel, mlp=[128, 128])
+        self.conv_part1 = nn.Conv1d(128, 256, 1)
+        self.bn_part1 = nn.BatchNorm1d(256)
+        self.drop_part1 = nn.Dropout(0.5)
+        self.conv_part2 = nn.Conv1d(256, 512, 1)
+        
     def forward(self, xyz):
         B, _, N = xyz.shape
         if self.normal_channel:
@@ -76,18 +65,9 @@ class get_model(nn.Module):
         l1_points = self.fp2(l1_xyz, l2_xyz, l1_points, l2_points)
         l0_points = self.fp1(xyz, l1_xyz, norm, l1_points)
         x_part = self.drop_part1(F.relu(self.bn_part1(self.conv_part1(l0_points))))
-        x_part = self.drop_part2(F.relu(self.bn_part2(self.conv_part2(x_part))))
+        embed = self.conv_part2(x_part).transpose(-2, -1)
 
-        embed = self.conv_part3(x_part).transpose(-2, -1) # create embeddings for language model...
-        logits = F.softmax(self.llama_model.model.forward_for_embeddings(embed, 0), dim=-1) # get logits from llama
-        assert logits.shape[-1] == 32000
-        
-        # get tokens from logits
-        # let's not use sample top p...
-        tokens = torch.argmax(logits, dim=-1) 
-
-
-        return x, logits, tokens
+        return x, embed
 
 
 class get_loss(nn.Module):
