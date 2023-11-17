@@ -11,8 +11,14 @@ num_class: # of class of an object
 output: class prob, part_embedding
 '''
 class get_model(nn.Module):
-    def __init__(self, num_points, num_class, llama_model, normal_channel=True, seq_len=10, tok_dim=32000):
+    def __init__(self, num_points, num_class, llama_model, ckpt_dir, normal_channel=True, seq_len=10, tok_dim=32000):
         super(get_model, self).__init__()
+        if '7b' in ckpt_dir:
+            self.emb_dim = 4096
+        elif '13b' in ckpt_dir:
+            self.emb_dim = 5120
+        else:
+            raise NotImplementedError
         self.num_points = num_points
         in_channel = 3 if normal_channel else 0
         self.normal_channel = normal_channel
@@ -37,7 +43,7 @@ class get_model(nn.Module):
         self.conv_part2 = nn.Conv1d(1024, 2048, 1)
         self.bn_part2 = nn.BatchNorm1d(2048)
         self.drop_part2 = nn.Dropout(0.5)
-        self.conv_part3 = nn.Conv1d(2048, 4096, 1)
+        self.conv_part3 = nn.Conv1d(2048, self.emb_dim, 1)
         # get pseudo embedding size: B seq_len 4096 -> output would be softmaxed B seq_len 32000
 
         self.llama_model = llama_model
@@ -72,7 +78,7 @@ class get_model(nn.Module):
         x_part = self.drop_part1(F.relu(self.bn_part1(self.conv_part1(l0_points))))
         x_part = self.drop_part2(F.relu(self.bn_part2(self.conv_part2(x_part))))
 
-        embed = self.conv_part3(x_part) # create embeddings for language model...
+        embed = self.conv_part3(x_part).transpose(-2, -1) # create embeddings for language model...
         logits = F.softmax(self.llama_model.model.forward_for_embeddings(embed, 0), dim=-1) # get logits from llama
         assert logits.shape[-1] == 32000
         
