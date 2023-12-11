@@ -11,10 +11,9 @@ num_class: # of class of an object
 output: class prob, part_embedding
 '''
 class get_model(nn.Module):
-    def __init__(self, num_points, num_class, normal_channel=True, obj_cls_only=False):
+    def __init__(self, num_class, normal_channel=True):
         super(get_model, self).__init__()
         
-        self.num_points = num_points
         in_channel = 3 if normal_channel else 0
         self.normal_channel = normal_channel
         self.sa1 = PointNetSetAbstractionMsg(512, [0.1, 0.2, 0.4], [16, 32, 128], in_channel,[[32, 32, 64], [64, 64, 128], [64, 96, 128]])
@@ -27,15 +26,7 @@ class get_model(nn.Module):
         self.bn2 = nn.BatchNorm1d(256)
         self.drop2 = nn.Dropout(0.5)
         self.fc3 = nn.Linear(256, num_class) # fc layer for object class
-        self.obj_cls_only = obj_cls_only
-        if not obj_cls_only:
-            self.fp3 = PointNetFeaturePropagation(in_channel=1024+640, mlp=[256,256])
-            self.fp2 = PointNetFeaturePropagation(in_channel=256+320, mlp=[256, 128])
-            self.fp1 = PointNetFeaturePropagation(in_channel=128+in_channel, mlp=[128, 128])
-            self.conv_part1 = nn.Conv1d(128, 256, 1)
-            self.bn_part1 = nn.BatchNorm1d(256)
-            self.drop_part1 = nn.Dropout(0.5)
-            self.conv_part2 = nn.Conv1d(256, 512, 1)
+        
     def forward(self, xyz):
         B, _, N = xyz.shape
         if self.normal_channel:
@@ -55,22 +46,8 @@ class get_model(nn.Module):
             x = self.drop2(F.relu(self.fc2(x)))
         x = self.fc3(x)
         x = F.log_softmax(x, -1) # object prob
-
-        '''
-        part embedding
-        '''
-        #Feature Propagation layers
-        if not self.obj_cls_only:
-            l2_points =  self.fp3(l2_xyz, l3_xyz, l2_points, l3_points)
-            l1_points = self.fp2(l1_xyz, l2_xyz, l1_points, l2_points)
-            l0_points = self.fp1(xyz, l1_xyz, norm, l1_points)
-            x_part = self.drop_part1(F.relu(self.bn_part1(self.conv_part1(l0_points))))
-            embed = self.conv_part2(x_part).transpose(-2, -1)
-        else:
-            embed = 0.0
-            
-    
-        return x, embed
+  
+        return x
 
 
 class get_loss(nn.Module):
