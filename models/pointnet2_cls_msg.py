@@ -3,6 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .pointnet2_utils import PointNetSetAbstractionMsg, PointNetSetAbstraction, PointNetFeaturePropagation
 import sys
+
+
 sys.path.append('llama/')
 '''
 customized version for object articulation project
@@ -48,6 +50,7 @@ class get_model(nn.Module):
         x = F.log_softmax(x, -1) # object prob
   
         return x
+
 
 
 class get_loss(nn.Module):
@@ -103,3 +106,17 @@ class get_model(nn.Module):
 
 
 '''
+
+
+if __name__ == "__main__":
+    num_parts = 358
+    in_channel = 128
+    num_shape = 256
+    a = torch.randn(64, in_channel, num_shape)
+    '''
+    무조건 in_channel이 가운데 가도록
+    '''
+    assert a.shape[1] == 128
+    model = get_model_shape(num_parts, in_channel, num_shape)
+    out = model(a)
+    print(out.shape) # batch_size * num_parts
